@@ -1,0 +1,11 @@
+{
+  "name": "com.unity-mcp-pro",
+  "version": "1.0.0",
+  "displayName": "Unity MCP Pro",
+  "description": "AI-powered Unity editor plugin via MCP (Model Context Protocol)",
+  "unity": "2021.3",
+  "keywords": ["mcp", "ai", "editor", "tools"],
+  "author": {
+    "name": "Unity MCP Pro"
+  }
+}

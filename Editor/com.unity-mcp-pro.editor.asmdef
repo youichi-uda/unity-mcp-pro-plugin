@@ -1,0 +1,19 @@
+{
+  "name": "com.unity-mcp-pro.editor",
+  "rootNamespace": "UnityMcpPro",
+  "references": [
+    "UnityEngine.UI",
+    "Unity.AI.Navigation",
+    "Unity.AI.Navigation.Editor",
+    "Unity.InputSystem"
+  ],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
