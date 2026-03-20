@@ -5,7 +5,9 @@
     "UnityEngine.UI",
     "Unity.AI.Navigation",
     "Unity.AI.Navigation.Editor",
-    "Unity.InputSystem"
+    "Unity.InputSystem",
+    "Unity.Timeline",
+    "Unity.Timeline.Editor"
   ],
   "includePlatforms": ["Editor"],
   "excludePlatforms": [],
@@ -29,6 +31,11 @@
       "name": "com.unity.inputsystem",
       "expression": "",
       "define": "HAS_INPUT_SYSTEM"
+    },
+    {
+      "name": "com.unity.timeline",
+      "expression": "",
+      "define": "HAS_TIMELINE"
     }
   ],
   "noEngineReferences": false

@@ -192,16 +192,18 @@ namespace UnityMcpPro
             object effectInstance = null;
 
             // Try profile.Has<T>() and profile.Add<T>()
-            var hasMethod = profileType.GetMethod("Has", BindingFlags.Public | BindingFlags.Instance);
-            if (hasMethod != null && hasMethod.IsGenericMethod)
+            var hasMethod = profileType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .FirstOrDefault(m => m.Name == "Has" && m.IsGenericMethod);
+            if (hasMethod != null)
             {
                 var specificHas = hasMethod.MakeGenericMethod(effectType);
                 bool exists = (bool)specificHas.Invoke(profile, null);
 
                 if (!exists)
                 {
-                    var addMethod = profileType.GetMethod("Add", BindingFlags.Public | BindingFlags.Instance);
-                    if (addMethod != null && addMethod.IsGenericMethod)
+                    var addMethod = profileType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                        .FirstOrDefault(m => m.Name == "Add" && m.IsGenericMethod);
+                    if (addMethod != null)
                     {
                         var specificAdd = addMethod.MakeGenericMethod(effectType);
                         effectInstance = specificAdd.Invoke(profile, new object[] { false });

@@ -473,6 +473,18 @@ namespace UnityMcpPro
                 Directory.CreateDirectory(dir);
 
             File.WriteAllText(fullPath, content);
+
+            // Ensure WaypointPath.cs exists (AIAgent depends on it)
+            string waypointScriptPath = "Assets/Scripts/AI/WaypointPath.cs";
+            string waypointFullPath = Path.Combine(Application.dataPath.Replace("/Assets", ""), waypointScriptPath);
+            if (!File.Exists(waypointFullPath))
+            {
+                string waypointDir = Path.GetDirectoryName(waypointFullPath);
+                if (!Directory.Exists(waypointDir))
+                    Directory.CreateDirectory(waypointDir);
+                File.WriteAllText(waypointFullPath, GenerateWaypointPathScript(true, "cyan"));
+            }
+
             AssetDatabase.Refresh();
 
             var result = new Dictionary<string, object>
