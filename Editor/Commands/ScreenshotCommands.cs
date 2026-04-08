@@ -81,35 +81,63 @@ namespace UnityMcpPro
             string format = GetStringParam(p, "format", "jpg");
             int quality = GetIntParam(p, "quality", 75);
 
-            Camera gameCamera = Camera.main;
-            if (gameCamera == null)
+            Texture2D tex;
+            string source;
+
+            if (Application.isPlaying)
             {
-                var cameras = Camera.allCameras;
-                if (cameras.Length > 0)
-                    gameCamera = cameras[0];
+                // CaptureScreenshotAsTexture captures the fully composited frame,
+                // including ScreenSpaceOverlay canvases that camera.Render() misses.
+                tex = ScreenCapture.CaptureScreenshotAsTexture();
+                source = "screen_capture";
+            }
+            else
+            {
+                Camera gameCamera = Camera.main;
+                if (gameCamera == null)
+                {
+                    var cameras = Camera.allCameras;
+                    if (cameras.Length > 0)
+                        gameCamera = cameras[0];
+                }
+                if (gameCamera == null)
+                    throw new InvalidOperationException("No camera found in the scene");
+
+                var rt = new RenderTexture(width, height, 24);
+                var prevRT = gameCamera.targetTexture;
+                gameCamera.targetTexture = rt;
+                gameCamera.Render();
+                gameCamera.targetTexture = prevRT;
+
+                RenderTexture.active = rt;
+                tex = new Texture2D(width, height, TextureFormat.RGB24, false);
+                tex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+                tex.Apply();
+                RenderTexture.active = null;
+                rt.Release();
+                UnityEngine.Object.DestroyImmediate(rt);
+                source = "game_camera";
             }
 
-            if (gameCamera == null)
-                throw new InvalidOperationException("No camera found in the scene");
-
-            var rt = new RenderTexture(width, height, 24);
-            var prevRT = gameCamera.targetTexture;
-            gameCamera.targetTexture = rt;
-            gameCamera.Render();
-            gameCamera.targetTexture = prevRT;
-
-            RenderTexture.active = rt;
-            var tex = new Texture2D(width, height, TextureFormat.RGB24, false);
-            tex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
-            tex.Apply();
-            RenderTexture.active = null;
+            // Resize to requested dimensions if the captured size differs
+            if (tex.width != width || tex.height != height)
+            {
+                var resizeRt = new RenderTexture(width, height, 0);
+                Graphics.Blit(tex, resizeRt);
+                RenderTexture.active = resizeRt;
+                var resizedTex = new Texture2D(width, height, TextureFormat.RGB24, false);
+                resizedTex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+                resizedTex.Apply();
+                RenderTexture.active = null;
+                UnityEngine.Object.DestroyImmediate(tex);
+                resizeRt.Release();
+                UnityEngine.Object.DestroyImmediate(resizeRt);
+                tex = resizedTex;
+            }
 
             byte[] imageData = EncodeTexture(tex, format, quality);
             string base64 = Convert.ToBase64String(imageData);
-
             UnityEngine.Object.DestroyImmediate(tex);
-            rt.Release();
-            UnityEngine.Object.DestroyImmediate(rt);
 
             return new Dictionary<string, object>
             {
@@ -118,8 +146,7 @@ namespace UnityMcpPro
                 { "height", height },
                 { "format", format },
                 { "mimeType", GetMimeType(format) },
-                { "source", "game_camera" },
-                { "cameraName", gameCamera.name }
+                { "source", source }
             };
         }
 
