@@ -125,7 +125,14 @@ namespace UnityMcpPro
                         {
                             if (prop.propertyType == SerializedPropertyType.ObjectReference &&
                                 prop.objectReferenceValue == null &&
+#if UNITY_6000_5_OR_NEWER
+                                // objectReferenceInstanceIDValue is obsolete in 6000.5+;
+                                // the EntityId-based property replaces it. Compare via
+                                // Equals so the code is independent of EntityId's operators.
+                                !prop.objectReferenceEntityIdValue.Equals(default(EntityId)))
+#else
                                 prop.objectReferenceInstanceIDValue != 0)
+#endif
                             {
                                 missingRefs.Add(new Dictionary<string, object>
                                 {

@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -19,7 +20,12 @@ namespace UnityMcpPro
         // Clear the reference cache after each domain reload so stale assembly
         // paths from a previous reload cycle don't cause duplicate-reference errors.
         [UnityEditor.InitializeOnLoadMethod]
-        private static void OnDomainReload() => _referenceCache = null;
+        private static void OnDomainReload()
+        {
+            _referenceCache = null;
+            _roslynProbed = false;
+            _roslynCache = null;
+        }
 
         public static void Register(CommandRouter router)
         {
@@ -190,9 +196,17 @@ public static class McpDynamicScript
             return refs;
         }
 
-        // Candidate sub-paths under applicationContentsPath where Unity may place Roslyn.
-        // Linux/Windows and macOS 6000.0 use the root directly; macOS 6000.3+ moved the
-        // binaries into Resources/Scripting/.
+        // How to invoke a discovered Roslyn compiler. When Dotnet is null, Csc is a
+        // self-contained executable run directly; otherwise Dotnet hosts the managed Csc dll.
+        private struct RoslynInvocation
+        {
+            public string Csc;
+            public string Dotnet;
+        }
+
+        // Candidate sub-paths under applicationContentsPath where Unity may place the
+        // dotnet-hosted Roslyn. Linux/Windows and macOS 6000.0 use the root directly;
+        // macOS 6000.3+ moved the binaries into Resources/Scripting/.
         private static readonly string[] RoslynRoots =
         {
             "",                    // Linux / Windows / macOS Unity 6000.0
@@ -204,31 +218,114 @@ public static class McpDynamicScript
         private static readonly string DotnetBinary =
             Application.platform == RuntimePlatform.WindowsEditor ? "dotnet.exe" : "dotnet";
 
-        private static (string csc, string dotnet)? FindRoslyn(string contentsPath)
+        // Probing the bundled install can be expensive, so cache the result per domain.
+        private static RoslynInvocation? _roslynCache;
+        private static bool _roslynProbed;
+
+        private static RoslynInvocation? FindRoslyn(string contentsPath)
         {
+            if (_roslynProbed) return _roslynCache;
+            _roslynProbed = true;
+            _roslynCache  = ProbeRoslyn(contentsPath);
+            return _roslynCache;
+        }
+
+        private static RoslynInvocation? ProbeRoslyn(string contentsPath)
+        {
+            // 1. dotnet-hosted Roslyn at the known fast-path locations.
             foreach (var root in RoslynRoots)
             {
                 var csc    = Path.Combine(contentsPath, root, "DotNetSdkRoslyn", "csc.dll");
                 var dotnet = Path.Combine(contentsPath, root, "NetCoreRuntime", DotnetBinary);
-                if (File.Exists(csc) && File.Exists(dotnet)) return (csc, dotnet);
+                if (File.Exists(csc) && File.Exists(dotnet))
+                    return new RoslynInvocation { Csc = csc, Dotnet = dotnet };
             }
+
+            // 2. dotnet-hosted Roslyn bundled inside the .NET SDK (Unity 6000.5+ layout):
+            //    Data/DotNetSdk/sdk/<version>/Roslyn/bincore/csc.dll hosted by
+            //    Data/DotNetSdk/dotnet.exe. The SDK version folder varies, so probe it.
+            var sdkRoot   = Path.Combine(contentsPath, "DotNetSdk");
+            var sdkDotnet = Path.Combine(sdkRoot, DotnetBinary);
+            if (File.Exists(sdkDotnet))
+            {
+                var sdkVersions = Path.Combine(sdkRoot, "sdk");
+                string[] verDirs = null;
+                try { verDirs = Directory.GetDirectories(sdkVersions); } catch { }
+                if (verDirs != null)
+                    foreach (var verDir in verDirs)
+                    {
+                        var csc = Path.Combine(verDir, "Roslyn", "bincore", "csc.dll");
+                        if (File.Exists(csc))
+                            return new RoslynInvocation { Csc = csc, Dotnet = sdkDotnet };
+                    }
+            }
+
+            // 3. Self-contained Roslyn csc executable (no dotnet host). Present in some
+            //    installs under Tools/Roslyn and runs directly on Windows; covers layouts
+            //    where neither dotnet-hosted location above is found.
+            var standalone = Path.Combine(contentsPath, "Tools", "Roslyn",
+                Application.platform == RuntimePlatform.WindowsEditor ? "csc.exe" : "csc");
+            if (File.Exists(standalone))
+                return new RoslynInvocation { Csc = standalone, Dotnet = null };
+
+            // 4. Slow path: Unity relocated the binaries between releases. Search the
+            //    bundled scripting folders for csc.dll plus a dotnet host. Bounded to a
+            //    few candidate roots (not the whole multi-GB Data folder) and cached.
+            string foundCsc = null, foundDotnet = null;
+            foreach (var dir in new[] { "DotNetSdk", "DotNetSdkRoslyn", "NetCoreRuntime", "Resources", "Tools" })
+            {
+                var root = Path.Combine(contentsPath, dir);
+                if (!Directory.Exists(root)) continue;
+                foreach (var f in EnumerateFilesSafe(root))
+                {
+                    var name = Path.GetFileName(f);
+                    if (foundCsc == null && name.Equals("csc.dll", StringComparison.OrdinalIgnoreCase))
+                        foundCsc = f;
+                    else if (foundDotnet == null && name.Equals(DotnetBinary, StringComparison.OrdinalIgnoreCase))
+                        foundDotnet = f;
+                    if (foundCsc != null && foundDotnet != null) break;
+                }
+                if (foundCsc != null && foundDotnet != null) break;
+            }
+            if (foundCsc != null && foundDotnet != null)
+                return new RoslynInvocation { Csc = foundCsc, Dotnet = foundDotnet };
+
             return null;
+        }
+
+        // Recursive file walk that swallows per-directory access errors instead of
+        // aborting the whole enumeration the way Directory.GetFiles(AllDirectories) does.
+        private static IEnumerable<string> EnumerateFilesSafe(string root)
+        {
+            var stack = new Stack<string>();
+            stack.Push(root);
+            while (stack.Count > 0)
+            {
+                var dir = stack.Pop();
+                string[] files = null, subDirs = null;
+                try { files = Directory.GetFiles(dir); } catch { }
+                try { subDirs = Directory.GetDirectories(dir); } catch { }
+                if (files != null)
+                    foreach (var f in files) yield return f;
+                if (subDirs != null)
+                    foreach (var d in subDirs) stack.Push(d);
+            }
         }
 
         private static Assembly CompileCode(string code)
         {
-            // Prefer Roslyn (csc.dll) via Unity's bundled .NET runtime for full C# support.
-            // Fall back to CodeDom when the subprocess approach is unavailable.
+            // Prefer Roslyn via Unity's bundled compiler for full C# support.
+            // Fall back to CodeDom when no Roslyn install can be located.
             var roslyn = FindRoslyn(EditorApplication.applicationContentsPath);
             if (roslyn.HasValue)
-                return CompileWithRoslyn(code, roslyn.Value.csc, roslyn.Value.dotnet);
+                return CompileWithRoslyn(code, roslyn.Value);
 
             UnityEngine.Debug.Log("[UnityMcpPro] Roslyn compiler not found under applicationContentsPath; " +
                                   "falling back to CodeDom. C# features beyond .NET 4.x may not compile correctly.");
             return CompileWithCodeDom(code);
         }
 
-        private static Assembly CompileWithRoslyn(string code, string cscDll, string dotnet)
+        private static Assembly CompileWithRoslyn(string code, RoslynInvocation roslyn)
         {
             // Use a per-call GUID subdirectory to avoid collisions between concurrent
             // execute_editor_script calls or a second call before a previous delete runs.
@@ -236,20 +333,39 @@ public static class McpDynamicScript
             Directory.CreateDirectory(callDir);
             var sourceFile = Path.Combine(callDir, "McpDynamic.cs");
             var outputDll  = Path.Combine(callDir, "McpDynamic.dll");
+            var rspFile    = Path.Combine(callDir, "McpDynamic.rsp");
 
             File.WriteAllText(sourceFile, code);
 
-            // Build /reference: args, deduplicated by filename.
-            var refArgs = string.Join(" ",
-                GetReferences().Select(r => $"\"/reference:{r}\""));
+            // Pass every compiler argument through a response file rather than the command
+            // line. A real project resolves to hundreds of /reference: paths, which easily
+            // overflows the Windows command-line length limit (~32 KB) and surfaces as
+            // "The filename or extension is too long". Response files have no such limit and
+            // are understood by both csc.exe and csc.dll. Args inside may be quoted, so spaces
+            // in reference paths are safe; the .rsp itself is referenced by bare name with the
+            // process working directory set to callDir, avoiding spaces in its own path.
+            var rsp = new StringBuilder();
+            rsp.AppendLine("/target:library");
+            rsp.AppendLine("/langversion:latest");
+            rsp.AppendLine("/optimize-");
+            rsp.AppendLine($"\"/out:{outputDll}\"");
+            foreach (var r in GetReferences())
+                rsp.AppendLine($"\"/reference:{r}\"");
+            rsp.AppendLine($"\"{sourceFile}\"");
+            File.WriteAllText(rspFile, rsp.ToString());
 
-            var arguments = $"\"{cscDll}\" /target:library /langversion:latest /optimize- " +
-                            $"\"/out:{outputDll}\" {refArgs} \"{sourceFile}\"";
+            // Standalone csc.exe is invoked directly; the dotnet-hosted csc.dll needs the
+            // dotnet host as the executable with the dll path as its first argument.
+            string fileName  = string.IsNullOrEmpty(roslyn.Dotnet) ? roslyn.Csc : roslyn.Dotnet;
+            string arguments = string.IsNullOrEmpty(roslyn.Dotnet)
+                ? "@McpDynamic.rsp"
+                : $"\"{roslyn.Csc}\" @McpDynamic.rsp";
 
             var psi = new ProcessStartInfo
             {
-                FileName               = dotnet,
+                FileName               = fileName,
                 Arguments              = arguments,
+                WorkingDirectory       = callDir,
                 RedirectStandardOutput = true,
                 RedirectStandardError  = true,
                 UseShellExecute        = false,
@@ -575,15 +691,16 @@ public static class McpDynamicScript
             });
 
             int count = 0;
-            var seenObjects = new HashSet<int>();
+            // Dedup on the GameObject reference itself rather than its instance id:
+            // Object.GetInstanceID() is obsolete in Unity 6000.5+ (replaced by the
+            // EntityId-based API), and the reference is just as good a key here.
+            var seenObjects = new HashSet<GameObject>();
 
             foreach (var col in colliders)
             {
                 if (count >= maxResults) break;
 
-                int instanceId = col.gameObject.GetInstanceID();
-                if (seenObjects.Contains(instanceId)) continue;
-                seenObjects.Add(instanceId);
+                if (!seenObjects.Add(col.gameObject)) continue;
 
                 float distance = Vector3.Distance(center, col.transform.position);
                 var pos = col.transform.position;
