@@ -23,10 +23,16 @@ namespace UnityMcpPro
         private const int MAX_PORT = 6609;
         private const float RECONNECT_INTERVAL = 3f;
         private const int BUFFER_SIZE = 65536;
+        private const int PROJECT_MISMATCH_CLOSE_CODE = 4001;
+        private const double REJECTED_PORT_BACKOFF_SECONDS = 30.0;
 
         private readonly CommandRouter _router;
         private readonly ConcurrentDictionary<int, Connection> _connections = new ConcurrentDictionary<int, Connection>();
+        private readonly ConcurrentDictionary<int, double> _rejectedUntil = new ConcurrentDictionary<int, double>();
         private readonly ConcurrentQueue<PendingAction> _mainThreadActions = new ConcurrentQueue<PendingAction>();
+        // Thread-safe monotonic clock for rejection backoff (EditorApplication.timeSinceStartup is main-thread-only).
+        private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
+        private string _projectPath;
         private double _lastReconnectAttempt;
         private volatile bool _running;
         private volatile bool _connecting;
@@ -47,6 +53,9 @@ namespace UnityMcpPro
         {
             if (_running) return;
             _running = true;
+            // Application.dataPath only callable from main thread — cache for use in connect threads.
+            // Project root is the directory containing Assets/ and ProjectSettings/.
+            _projectPath = Path.GetDirectoryName(Application.dataPath);
             _lastReconnectAttempt = EditorApplication.timeSinceStartup;
             EditorApplication.update += Update;
             TryConnect();
@@ -89,12 +98,17 @@ namespace UnityMcpPro
             {
                 try
                 {
+                    double now = _clock.Elapsed.TotalSeconds;
                     for (int port = BASE_PORT; port <= MAX_PORT; port++)
                     {
                         if (!_running) break;
 
                         // Skip ports we're already connected to
                         if (_connections.TryGetValue(port, out var existing) && existing.Connected)
+                            continue;
+
+                        // Skip ports that recently rejected us (project mismatch)
+                        if (_rejectedUntil.TryGetValue(port, out var rejectedUntil) && now < rejectedUntil)
                             continue;
 
                         try
@@ -128,6 +142,10 @@ namespace UnityMcpPro
                                 conn.ReceiveThread.Start();
 
                                 _connections[port] = conn;
+
+                                // Send hello handshake so the server can confirm we are the right project.
+                                // Server may close us with code 4001 if the project does not match.
+                                SendHello(conn);
 
                                 int p = port; // capture for closure
                                 _mainThreadActions.Enqueue(new PendingAction(() =>
@@ -312,6 +330,23 @@ namespace UnityMcpPro
                             break;
 
                         case 0x8: // Close
+                            // RFC 6455: payload optionally starts with 2-byte big-endian status code
+                            int closeCode = 1005;
+                            string closeReason = null;
+                            if (payload != null && payload.Length >= 2)
+                            {
+                                closeCode = (payload[0] << 8) | payload[1];
+                                if (payload.Length > 2)
+                                    closeReason = Encoding.UTF8.GetString(payload, 2, payload.Length - 2);
+                            }
+                            if (closeCode == PROJECT_MISMATCH_CLOSE_CODE)
+                            {
+                                _rejectedUntil[conn.Port] = _clock.Elapsed.TotalSeconds + REJECTED_PORT_BACKOFF_SECONDS;
+                                int p = conn.Port;
+                                string reason = closeReason ?? "(no reason)";
+                                _mainThreadActions.Enqueue(new PendingAction(() =>
+                                    Debug.Log($"[MCP] Port {p} not for this project — backing off ({reason})")));
+                            }
                             SendCloseFrame(conn);
                             conn.Connected = false;
                             return;
@@ -443,6 +478,16 @@ namespace UnityMcpPro
         private void SendTextFrame(Connection conn, string text)
         {
             SendWebSocketFrame(conn, 0x1, Encoding.UTF8.GetBytes(text));
+        }
+
+        private void SendHello(Connection conn)
+        {
+            // JSON-encode the path manually so backslashes (Windows) round-trip correctly.
+            string escapedPath = (_projectPath ?? "")
+                .Replace("\\", "\\\\")
+                .Replace("\"", "\\\"");
+            string hello = $"{{\"jsonrpc\":\"2.0\",\"method\":\"hello\",\"params\":{{\"projectPath\":\"{escapedPath}\"}}}}";
+            SendTextFrame(conn, hello);
         }
 
         private void ProcessMessage(Connection conn, string message)
