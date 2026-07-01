@@ -19,7 +19,7 @@ namespace UnityMcpPro
 
         private static Light FindOrCreateDirectionalLight()
         {
-            var lights = UnityEngine.Object.FindObjectsByType<Light>(FindObjectsSortMode.None);
+            var lights = FindObjectsByTypeCompat<Light>();
             foreach (var light in lights)
             {
                 if (light.type == LightType.Directional)
@@ -540,7 +540,7 @@ namespace UnityMcpPro
 
             // Directional light info
             Dictionary<string, object> directionalLightInfo = null;
-            var lights = UnityEngine.Object.FindObjectsByType<Light>(FindObjectsSortMode.None);
+            var lights = FindObjectsByTypeCompat<Light>();
             foreach (var light in lights)
             {
                 if (light.type == LightType.Directional)

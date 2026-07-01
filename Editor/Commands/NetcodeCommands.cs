@@ -47,7 +47,7 @@ namespace UnityMcpPro
                     "Netcode for GameObjects not found. Install 'com.unity.netcode.gameobjects' via Package Manager.");
 
             // Find existing NetworkManager or create one
-            var existingManager = UnityEngine.Object.FindObjectsByType(networkManagerType, FindObjectsSortMode.None);
+            var existingManager = FindObjectsByTypeCompat(networkManagerType);
             GameObject managerGo;
             Component managerComp;
 
@@ -414,7 +414,7 @@ namespace UnityMcpPro
             }
 
             // Find NetworkManager
-            var managers = UnityEngine.Object.FindObjectsByType(networkManagerType, FindObjectsSortMode.None);
+            var managers = FindObjectsByTypeCompat(networkManagerType);
             if (managers.Length > 0)
             {
                 var manager = managers[0] as Component;
@@ -466,7 +466,7 @@ namespace UnityMcpPro
             // Find all NetworkObjects
             if (networkObjectType != null)
             {
-                var networkObjects = UnityEngine.Object.FindObjectsByType(networkObjectType, FindObjectsSortMode.None);
+                var networkObjects = FindObjectsByTypeCompat(networkObjectType);
                 var netObjList = new List<object>();
 
                 foreach (var netObj in networkObjects)

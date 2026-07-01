@@ -49,7 +49,7 @@ namespace UnityMcpPro
                     "XR Interaction Toolkit not found. Install 'com.unity.xr.interaction.toolkit' via Package Manager.");
 
             // Check if XR Origin already exists
-            var existingOrigins = UnityEngine.Object.FindObjectsByType(xrOriginType, FindObjectsSortMode.None);
+            var existingOrigins = FindObjectsByTypeCompat(xrOriginType);
             GameObject xrOriginGo;
             Component xrOriginComp;
 
@@ -133,7 +133,7 @@ namespace UnityMcpPro
             var interactionManagerType = FindXRType("XRInteractionManager");
             if (interactionManagerType != null)
             {
-                var existingManagers = UnityEngine.Object.FindObjectsByType(interactionManagerType, FindObjectsSortMode.None);
+                var existingManagers = FindObjectsByTypeCompat(interactionManagerType);
                 if (existingManagers.Length == 0)
                 {
                     var managerGo = new GameObject("XR Interaction Manager");
@@ -295,7 +295,7 @@ namespace UnityMcpPro
             if (xrOriginType == null)
                 throw new InvalidOperationException("XR Origin not found in scene. Run setup_xr first.");
 
-            var origins = UnityEngine.Object.FindObjectsByType(xrOriginType, FindObjectsSortMode.None);
+            var origins = FindObjectsByTypeCompat(xrOriginType);
             if (origins.Length == 0)
                 throw new InvalidOperationException("No XR Origin found in scene. Run setup_xr first.");
 
@@ -442,7 +442,7 @@ namespace UnityMcpPro
             var originType = xrOriginType ?? xrRigType;
             if (originType != null)
             {
-                var origins = UnityEngine.Object.FindObjectsByType(originType, FindObjectsSortMode.None);
+                var origins = FindObjectsByTypeCompat(originType);
                 if (origins.Length > 0)
                 {
                     var originComp = origins[0] as Component;
@@ -476,7 +476,7 @@ namespace UnityMcpPro
             var baseInteractorType = FindXRType("XRBaseInteractor") ?? FindXRType("XRBaseInputInteractor");
             if (baseInteractorType != null)
             {
-                var found = UnityEngine.Object.FindObjectsByType(baseInteractorType, FindObjectsSortMode.None);
+                var found = FindObjectsByTypeCompat(baseInteractorType);
                 foreach (var interactor in found)
                 {
                     var comp = interactor as Component;
@@ -497,7 +497,7 @@ namespace UnityMcpPro
             var baseInteractableType = FindXRType("XRBaseInteractable");
             if (baseInteractableType != null)
             {
-                var found = UnityEngine.Object.FindObjectsByType(baseInteractableType, FindObjectsSortMode.None);
+                var found = FindObjectsByTypeCompat(baseInteractableType);
                 foreach (var interactable in found)
                 {
                     var comp = interactable as Component;

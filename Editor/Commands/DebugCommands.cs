@@ -235,9 +235,7 @@ namespace UnityMcpPro
             UnityEngine.Object[] objects;
             try
             {
-                objects = UnityEngine.Object.FindObjectsByType(t,
-                    includeInactive ? FindObjectsInactive.Include : FindObjectsInactive.Exclude,
-                    FindObjectsSortMode.None);
+                objects = FindObjectsByTypeCompat(t, includeInactive);
             }
             catch
             {

@@ -164,6 +164,48 @@ namespace UnityMcpPro
             throw new ArgumentException($"Component '{componentName}' not found on {go.name}");
         }
 
+        // Unity 6000.5 deprecated the FindObjectsByType / FindFirstObjectByType
+        // overloads that take a FindObjectsSortMode; the replacement overloads it
+        // points to do not exist before 6000.5. Route calls through these guarded
+        // wrappers so the plugin stays warning-free on 6000.5 while still compiling
+        // on 2021.3+. The pre-6000.5 branch keeps the exact original overload.
+        protected static T[] FindObjectsByTypeCompat<T>() where T : UnityEngine.Object
+        {
+#if UNITY_6000_5_OR_NEWER
+            return UnityEngine.Object.FindObjectsByType<T>(FindObjectsInactive.Exclude);
+#else
+            return UnityEngine.Object.FindObjectsByType<T>(FindObjectsSortMode.None);
+#endif
+        }
+
+        protected static UnityEngine.Object[] FindObjectsByTypeCompat(Type type)
+        {
+#if UNITY_6000_5_OR_NEWER
+            return UnityEngine.Object.FindObjectsByType(type, FindObjectsInactive.Exclude);
+#else
+            return UnityEngine.Object.FindObjectsByType(type, FindObjectsSortMode.None);
+#endif
+        }
+
+        protected static UnityEngine.Object[] FindObjectsByTypeCompat(Type type, bool includeInactive)
+        {
+            var inactive = includeInactive ? FindObjectsInactive.Include : FindObjectsInactive.Exclude;
+#if UNITY_6000_5_OR_NEWER
+            return UnityEngine.Object.FindObjectsByType(type, inactive);
+#else
+            return UnityEngine.Object.FindObjectsByType(type, inactive, FindObjectsSortMode.None);
+#endif
+        }
+
+        protected static T FindFirstObjectByTypeCompat<T>() where T : UnityEngine.Object
+        {
+#if UNITY_6000_5_OR_NEWER
+            return UnityEngine.Object.FindAnyObjectByType<T>();
+#else
+            return UnityEngine.Object.FindFirstObjectByType<T>();
+#endif
+        }
+
         protected static object GetSerializedPropertyValue(SerializedProperty prop)
         {
             switch (prop.propertyType)

@@ -144,7 +144,7 @@ namespace UnityMcpPro
             var go = FindGameObject(goPath);
 
             // Check for existing listeners
-            var existing = UnityEngine.Object.FindObjectsByType<AudioListener>(FindObjectsSortMode.None);
+            var existing = FindObjectsByTypeCompat<AudioListener>();
             if (existing.Length > 0)
             {
                 var warnings = new List<string>();

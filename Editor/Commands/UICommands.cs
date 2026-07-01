@@ -56,7 +56,7 @@ namespace UnityMcpPro
                 go.transform.SetParent(parent.transform, false);
             }
 
-            if (UnityEngine.Object.FindFirstObjectByType<EventSystem>() == null)
+            if (FindFirstObjectByTypeCompat<EventSystem>() == null)
             {
                 var esGo = new GameObject("EventSystem");
                 esGo.AddComponent<EventSystem>();

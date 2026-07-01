@@ -319,7 +319,7 @@ namespace UnityMcpPro
 
 #if HAS_UGUI
             // Search legacy UI Text
-            foreach (var text in UnityEngine.Object.FindObjectsByType<Text>(FindObjectsSortMode.None))
+            foreach (var text in FindObjectsByTypeCompat<Text>())
             {
                 if (text.text == null) continue;
                 bool match = partial
@@ -344,7 +344,7 @@ namespace UnityMcpPro
 
             if (tmpTextType != null)
             {
-                foreach (var comp in UnityEngine.Object.FindObjectsByType(tmpTextType, FindObjectsSortMode.None))
+                foreach (var comp in FindObjectsByTypeCompat(tmpTextType))
                 {
                     var textProp = tmpTextType.GetProperty("text");
                     string txt = textProp?.GetValue(comp)?.ToString();

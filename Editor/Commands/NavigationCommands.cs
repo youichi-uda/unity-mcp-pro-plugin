@@ -25,7 +25,7 @@ namespace UnityMcpPro
             if (surfaceType == null)
                 throw new InvalidOperationException("NavMeshSurface not found. Install 'AI Navigation' package.");
 
-            var surfaces = UnityEngine.Object.FindObjectsByType(surfaceType, FindObjectsSortMode.None);
+            var surfaces = FindObjectsByTypeCompat(surfaceType);
             if (surfaces.Length == 0)
                 throw new InvalidOperationException("No NavMeshSurface components found in scene. Add a NavMeshSurface component first.");
 
@@ -166,8 +166,8 @@ namespace UnityMcpPro
             var triangulation = NavMesh.CalculateTriangulation();
 
             // Count agents and obstacles in scene
-            var agents = UnityEngine.Object.FindObjectsByType<NavMeshAgent>(FindObjectsSortMode.None);
-            var obstacles = UnityEngine.Object.FindObjectsByType<NavMeshObstacle>(FindObjectsSortMode.None);
+            var agents = FindObjectsByTypeCompat<NavMeshAgent>();
+            var obstacles = FindObjectsByTypeCompat<NavMeshObstacle>();
 
             var agentList = new List<object>();
             foreach (var agent in agents)

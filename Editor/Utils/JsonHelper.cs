@@ -8,9 +8,11 @@ using UnityEngine;
 namespace UnityMcpPro
 {
     /// <summary>
-    /// JSON-RPC request structure
+    /// JSON-RPC request structure. Populated only via the custom JsonHelper parser
+    /// (never Unity's JsonUtility), so it is intentionally not [Serializable] — that
+    /// attribute would trigger the 6000.5 serialization analyzer (UAC1009) on the
+    /// Dictionary field without providing any benefit.
     /// </summary>
-    [Serializable]
     public class JsonRpcRequest
     {
         public string jsonrpc;
