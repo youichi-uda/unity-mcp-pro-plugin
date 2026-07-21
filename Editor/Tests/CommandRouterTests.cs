@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace UnityMcpPro.Tests
 {
@@ -90,6 +93,10 @@ namespace UnityMcpPro.Tests
         public void Dispatch_HandlerThrows_SendsErrorResponse()
         {
             _router.Register("boom", p => throw new InvalidOperationException("kaboom"));
+
+            // Dispatch logs the caught handler exception via Debug.LogError; Unity's Test Runner
+            // fails any test that emits an unexpected error log, so declare it as expected.
+            LogAssert.Expect(LogType.Error, new Regex(@"\[MCP\] Command error \(boom\): kaboom"));
 
             string response = null;
             var request = new JsonRpcRequest

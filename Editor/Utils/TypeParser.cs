@@ -72,7 +72,7 @@ namespace UnityMcpPro
             if (targetType == typeof(Vector4)) return ParseVector4(strVal);
             if (targetType == typeof(Color)) return ParseColor(strVal);
             if (targetType == typeof(Quaternion)) return Quaternion.Euler(ParseVector3(strVal));
-            if (targetType == typeof(int)) return Convert.ToInt32(value);
+            if (targetType == typeof(int)) return (int)Convert.ToDouble(value); // truncate toward zero
             if (targetType == typeof(float)) return Convert.ToSingle(value);
             if (targetType == typeof(double)) return Convert.ToDouble(value);
             if (targetType == typeof(bool)) return Convert.ToBoolean(value);
